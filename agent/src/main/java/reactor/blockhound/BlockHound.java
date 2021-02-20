@@ -28,6 +28,9 @@ import net.bytebuddy.asm.Advice;
 import net.bytebuddy.matcher.ElementMatchers;
 import net.bytebuddy.pool.TypePool;
 import net.bytebuddy.pool.TypePool.CacheProvider;
+
+import reactor.blockhound.installbehaviour.BlockHoundInstallBehaviour;
+import reactor.blockhound.installbehaviour.InstallBehaviour;
 import reactor.blockhound.integration.BlockHoundIntegration;
 
 import java.lang.instrument.ClassFileTransformer;
@@ -85,14 +88,32 @@ public class BlockHound {
      * @see BlockHound#builder()
      */
     public static void install(BlockHoundIntegration... integrations) {
+        install(new InstallBehaviour(), integrations);
+    }
+
+    /**
+     * Loads integrations with {@link ServiceLoader}, adds provided integrations,
+     * and installs the BlockHound instrumentation.
+     * If you don't want to load the integrations, use {@link #builder()} method.
+     * @param installBehaviour for installing agents and running instrumentation
+     * @param integrations an array of integrations to automatically apply on the intermediate builder
+     * @see BlockHound#builder()
+      */
+    public static void install(BlockHoundInstallBehaviour installBehaviour, BlockHoundIntegration... integrations){
         Builder builder = builder();
         ServiceLoader<BlockHoundIntegration> serviceLoader = ServiceLoader.load(BlockHoundIntegration.class);
         Stream
                 .concat(StreamSupport.stream(serviceLoader.spliterator(), false), Stream.of(integrations))
                 .sorted()
                 .forEach(builder::with);
-        builder.install();
+        builder.install(installBehaviour);
+
     }
+
+
+
+
+
 
     private BlockHound() {
 
@@ -355,12 +376,15 @@ public class BlockHound {
         }
 
         Builder() {
+
+
         }
 
         /**
          * Installs the agent and runs the instrumentation, but only if BlockHound wasn't installed yet (it is global).
+         * @param installBehaviour
          */
-        public void install() {
+        public void install(BlockHoundInstallBehaviour installBehaviour) {
             if (!INITIALIZED.compareAndSet(false, true)) {
                 return;
             }
